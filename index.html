@@ -3,32 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelpingMyMama - 榮譽榜</title>
+    <title>四桂班級榮譽榜</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .card-active:active { background-color: #fef3c7; transform: scale(0.96); transition: 0.1s; }
-        .btn-plus:active { background-color: #15803d; transform: scale(0.9); }
-        .btn-minus:active { background-color: #b91c1c; transform: scale(0.9); }
+        .card-active:active { transform: scale(0.96); transition: 0.1s; }
+        .modal-bg { background-color: rgba(0,0,0,0.5); }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen pb-10">
+<body class="bg-gray-100 min-h-screen">
 
     <nav class="bg-orange-500 text-white p-5 shadow-lg sticky top-0 z-50">
         <h1 class="text-2xl font-bold text-center">四桂 班級榮譽榜</h1>
     </nav>
 
-    <div class="max-w-md mx-auto p-4">
-        <div id="student-list" class="space-y-4">
-            <div class="flex flex-col items-center justify-center py-20">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
-                <p class="text-gray-500 text-xl">連線雲端資料庫中...</p>
+    <div class="max-w-md mx-auto p-4" id="student-list">
+        <div class="text-center py-20 text-gray-500 text-xl">連線雲端中...</div>
+    </div>
+
+    <div id="detail-modal" class="fixed inset-0 modal-bg z-[100] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden">
+            <div class="p-6 border-b flex justify-between items-center">
+                <h2 id="modal-title" class="text-2xl font-bold text-gray-800">學生姓名</h2>
+                <button onclick="closeModal()" class="text-gray-400 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-6">
+                <div class="flex gap-4 mb-8">
+                    <button onclick="changePoints(1)" class="flex-1 bg-green-500 text-white py-4 rounded-2xl font-bold text-xl active:scale-95 shadow-lg">+1 分</button>
+                    <button onclick="changePoints(-1)" class="flex-1 bg-red-500 text-white py-4 rounded-2xl font-bold text-xl active:scale-95 shadow-lg">-1 分</button>
+                </div>
+
+                <h3 class="font-bold text-gray-500 mb-4 border-l-4 border-orange-400 pl-2 text-sm">歷史加扣分紀錄</h3>
+                <div id="log-list" class="space-y-3 max-h-60 overflow-y-auto pr-2 text-sm">
+                    <p class="text-center text-gray-400 py-4">尚無紀錄</p>
+                </div>
             </div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBNSfMo7ASbkNOJiQQg6jDwq6dkUYohwDY",
@@ -42,52 +57,82 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const q = query(collection(db, "students"), orderBy("total_points", "desc"));
         
-        onSnapshot(q, (snapshot) => {
+        let currentStudent = null;
+
+        const qStudents = query(collection(db, "students"), orderBy("total_points", "desc"));
+        onSnapshot(qStudents, (snapshot) => {
             const listDiv = document.getElementById('student-list');
-            listDiv.innerHTML = ""; 
-
-            if (snapshot.empty) {
-                listDiv.innerHTML = '<p class="text-center text-gray-400 py-10">目前沒有資料，請至 Firebase 新增！</p>';
-                return;
-            }
-
-            snapshot.forEach((snapshotDoc) => {
-                const data = snapshotDoc.data();
-                const studentId = snapshotDoc.id;
-                
-                const card = `
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center card-active transition-all cursor-pointer" 
-                         onclick="window.handleScoreAction('${studentId}', '${data.name}', ${data.total_points})">
-                        <div class="flex items-center gap-5">
-                            <span class="text-xl font-bold text-orange-200">#${data.seat_number}</span>
-                            <h2 class="text-2xl font-bold text-gray-800">${data.name}</h2>
+            listDiv.innerHTML = "";
+            snapshot.forEach(d => {
+                const s = d.data();
+                listDiv.innerHTML += `
+                    <div class="bg-white p-6 mb-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center card-active cursor-pointer" 
+                         onclick="openModal('${d.id}', '${s.name}', ${s.total_points})">
+                        <div class="flex items-center gap-4">
+                            <span class="text-orange-200 font-bold">#${s.seat_number}</span>
+                            <span class="text-xl font-bold text-gray-800">${s.name}</span>
                         </div>
-                        <div class="flex flex-col items-end">
-                            <span class="text-3xl font-black text-orange-600">${data.total_points || 0}</span>
-                            <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Points</span>
-                        </div>
-                    </div>
-                `;
-                listDiv.innerHTML += card;
+                        <div class="text-3xl font-black text-orange-600">${s.total_points || 0}</div>
+                    </div>`;
             });
         });
 
-        window.handleScoreAction = async (id, name, currentPoints) => {
-            const action = confirm(`【${name}】 目前 ${currentPoints} 分\n\n確定要加 1 分嗎？\n(按「取消」則進入扣分確認)`);
-            
-            const studentRef = doc(db, "students", id);
-            
-            if (action) {
-                await updateDoc(studentRef, { total_points: currentPoints + 1 });
-            } else {
-                const confirmMinus = confirm(`確定要扣 【${name}】 1 分嗎？`);
-                if (confirmMinus) {
-                    await updateDoc(studentRef, { total_points: currentPoints - 1 });
-                }
-            }
+        window.openModal = async (id, name, points) => {
+            currentStudent = { id, name, points };
+            document.getElementById('modal-title').innerText = name;
+            document.getElementById('detail-modal').classList.remove('hidden');
+            loadLogs(id); 
         };
+
+        window.closeModal = () => {
+            document.getElementById('detail-modal').classList.add('hidden');
+        };
+
+        window.changePoints = async (amount) => {
+            const reason = prompt(`請輸入給 ${currentStudent.name} ${amount > 0 ? '加' : '扣'}分的理由：`, amount > 0 ? "表現優良" : "秩序不佳");
+            if (reason === null) return;
+
+            try {
+                await updateDoc(doc(db, "students", currentStudent.id), {
+                    total_points: currentStudent.points + amount
+                });
+                await addDoc(collection(db, "logs"), {
+                    student_id: currentStudent.id,
+                    amount: amount,
+                    reason: reason,
+                    timestamp: new Date()
+                });
+                currentStudent.points += amount;
+            } catch (e) { alert("更新失敗！"); }
+        };
+
+        function loadLogs(studentId) {
+            const logList = document.getElementById('log-list');
+            const qLogs = query(collection(db, "logs"), where("student_id", "==", studentId), orderBy("timestamp", "desc"));
+            
+            onSnapshot(qLogs, (snapshot) => {
+                logList.innerHTML = "";
+                if (snapshot.empty) {
+                    logList.innerHTML = '<p class="text-center text-gray-400 py-4">尚無紀錄</p>';
+                    return;
+                }
+                snapshot.forEach(d => {
+                    const l = d.data();
+                    const date = l.timestamp?.toDate().toLocaleString() || "處理中...";
+                    logList.innerHTML += `
+                        <div class="flex justify-between items-start bg-gray-50 p-3 rounded-lg border-l-4 ${l.amount > 0 ? 'border-green-400' : 'border-red-400'}">
+                            <div>
+                                <div class="font-bold text-gray-700">${l.reason}</div>
+                                <div class="text-[10px] text-gray-400">${date}</div>
+                            </div>
+                            <div class="font-bold ${l.amount > 0 ? 'text-green-600' : 'text-red-600'}">
+                                ${l.amount > 0 ? '+' : ''}${l.amount}
+                            </div>
+                        </div>`;
+                });
+            });
+        }
     </script>
 </body>
 </html>
