@@ -17,8 +17,38 @@
         <h1 class="text-2xl font-bold text-center">三桂 班級榮譽榜</h1>
     </nav>
 
-    <div class="max-w-md mx-auto p-4" id="student-list">
+    <div class="max-w-md mx-auto p-4 pb-24" id="student-list">
         <div class="text-center py-20 text-gray-500 text-xl">連線雲端中...</div>
+    </div>
+
+    <button onclick="openBatchModal()" class="fixed bottom-6 right-6 w-16 h-16 bg-orange-600 text-white rounded-full shadow-2xl text-3xl font-bold z-40 active:scale-90 transition-transform">
+        ＋
+    </button>
+
+    <div id="batch-modal" class="fixed inset-0 modal-bg z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-6 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-xl font-bold text-gray-800">批量操作</h2>
+                <button onclick="closeBatchModal()" class="text-gray-400 text-3xl p-2">&times;</button>
+            </div>
+            
+            <div class="p-6 flex-1 overflow-y-auto">
+                <div class="flex gap-4 mb-6">
+                    <button id="batch-plus" onclick="setBatchAmount(1)" class="flex-1 py-4 rounded-xl font-bold text-xl border-2 border-green-500 text-green-600 bg-green-50">＋1 分</button>
+                    <button id="batch-minus" onclick="setBatchAmount(-1)" class="flex-1 py-4 rounded-xl font-bold text-xl border-2 border-gray-200 text-gray-400">－1 分</button>
+                </div>
+
+                <input type="text" id="batch-reason" placeholder="請輸入理由" class="w-full p-4 border rounded-xl mb-6 outline-orange-400 text-lg">
+
+                <h3 class="font-bold text-gray-500 mb-3 text-sm text-left">選擇學生：</h3>
+                <div id="batch-student-select" class="space-y-2">
+                    </div>
+            </div>
+
+            <div class="p-6 border-t bg-gray-50">
+                <button id="submit-batch" onclick="submitBatch()" class="w-full bg-orange-500 text-white py-4 rounded-2xl font-bold text-xl active:scale-95 shadow-lg">確認送出</button>
+            </div>
+        </div>
     </div>
 
     <div id="detail-modal" class="fixed inset-0 modal-bg z-[100] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -60,13 +90,20 @@
         const db = getFirestore(app);
         
         let currentStudent = null;
+        let allStudents = []; 
+        let batchAmount = 1;
 
         const qStudents = query(collection(db, "students"), orderBy("total_points", "desc"));
         onSnapshot(qStudents, (snapshot) => {
+            allStudents = [];
             const listDiv = document.getElementById('student-list');
             listDiv.innerHTML = "";
             snapshot.forEach(d => {
+                //const s = snapshotDoc.data(); 
                 const s = d.data();
+                const sid = d.id;
+                allStudents.push({ id: sid, ...s });
+
                 listDiv.innerHTML += `
                     <div class="bg-white p-6 mb-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center card-active cursor-pointer" 
                          onclick="openModal('${d.id}', '${s.name}', ${s.total_points})">
@@ -93,7 +130,6 @@
         window.changePoints = async (amount) => {
             const reason = prompt(`請輸入給 ${currentStudent.name} ${amount > 0 ? '加' : '扣'}分的理由：`, amount > 0 ? "表現優良" : "秩序不佳");
             if (reason === null) return;
-
             try {
                 await updateDoc(doc(db, "students", currentStudent.id), {
                     total_points: currentStudent.points + amount
@@ -111,29 +147,81 @@
         function loadLogs(studentId) {
             const logList = document.getElementById('log-list');
             const qLogs = query(collection(db, "logs"), where("student_id", "==", studentId), orderBy("timestamp", "desc"));
-            
             onSnapshot(qLogs, (snapshot) => {
-                logList.innerHTML = "";
-                if (snapshot.empty) {
-                    logList.innerHTML = '<p class="text-center text-gray-400 py-4">尚無紀錄</p>';
-                    return;
-                }
+                logList.innerHTML = snapshot.empty ? '<p class="text-center text-gray-400 py-4">尚無紀錄</p>' : "";
                 snapshot.forEach(d => {
                     const l = d.data();
-                    const date = l.timestamp?.toDate().toLocaleString() || "處理中...";
+                    const date = l.timestamp?.toDate().toLocaleString() || "讀取中";
                     logList.innerHTML += `
                         <div class="flex justify-between items-start bg-gray-50 p-3 rounded-lg border-l-4 ${l.amount > 0 ? 'border-green-400' : 'border-red-400'}">
-                            <div>
-                                <div class="font-bold text-gray-700">${l.reason}</div>
-                                <div class="text-[10px] text-gray-400">${date}</div>
-                            </div>
-                            <div class="font-bold ${l.amount > 0 ? 'text-green-600' : 'text-red-600'}">
-                                ${l.amount > 0 ? '+' : ''}${l.amount}
-                            </div>
+                            <div><div class="font-bold text-gray-700 text-left">${l.reason}</div><div class="text-[10px] text-gray-400 text-left">${date}</div></div>
+                            <div class="font-bold ${l.amount > 0 ? 'text-green-600' : 'text-red-600'}">${l.amount > 0 ? '+' : ''}${l.amount}</div>
                         </div>`;
                 });
             });
         }
+
+        window.openBatchModal = () => {
+            const selectDiv = document.getElementById('batch-student-select');
+            const sortedBySeat = [...allStudents].sort((a, b) => a.seat_number - b.seat_number);
+            
+            selectDiv.innerHTML = sortedBySeat.map(s => `
+                <label class="flex items-center gap-4 p-4 border rounded-xl active:bg-orange-50 cursor-pointer">
+                    <input type="checkbox" name="student-check" value="${s.id}" data-name="${s.name}" data-points="${s.total_points}">
+                    <span class="text-gray-400 font-bold w-8">#${s.seat_number}</span>
+                    <span class="text-lg font-medium">${s.name}</span>
+                </label>
+            `).join('');
+            
+            document.getElementById('batch-modal').classList.remove('hidden');
+        };
+
+        window.closeBatchModal = () => document.getElementById('batch-modal').classList.add('hidden');
+
+        window.setBatchAmount = (amt) => {
+            batchAmount = amt;
+            document.getElementById('batch-plus').className = amt === 1 ? "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-green-500 text-green-600 bg-green-50" : "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-gray-200 text-gray-400";
+            document.getElementById('batch-minus').className = amt === -1 ? "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-red-500 text-red-600 bg-red-50" : "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-gray-200 text-gray-400";
+        };
+
+        window.submitBatch = async () => {
+            const reasonInput = document.getElementById('batch-reason');
+            const reason = reasonInput.value || (batchAmount > 0 ? "表現優良" : "秩序不佳");
+            const selected = document.querySelectorAll('input[name="student-check"]:checked');
+            
+            if (selected.length === 0) return alert("請至少選擇一位學生");
+
+            const batch = writeBatch(db);
+            const btn = document.getElementById('submit-batch');
+            btn.disabled = true;
+            btn.innerText = "正在儲存";
+
+            selected.forEach(input => {
+                const id = input.value;
+                const name = input.dataset.name;
+                const oldPoints = parseInt(input.dataset.points);
+                
+                batch.update(doc(db, "students", id), { total_points: oldPoints + batchAmount });
+                batch.set(doc(collection(db, "logs")), {
+                    student_id: id,
+                    student_name: name,
+                    amount: batchAmount,
+                    reason: reason,
+                    timestamp: new Date()
+                });
+            });
+
+            try {
+                await batch.commit();
+                alert(`已更新 ${selected.length} 位 學生分數`);
+                reasonInput.value = "";
+                closeBatchModal();
+            } catch (e) { alert("更新失敗"); }
+            finally { 
+                btn.disabled = false; 
+                btn.innerText = "確認送出";
+            }
+        };
     </script>
 </body>
 </html>
