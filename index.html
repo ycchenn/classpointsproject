@@ -93,7 +93,11 @@
         let allStudents = []; 
         let batchAmount = 1;
 
-        const qStudents = query(collection(db, "students"), orderBy("total_points", "desc"));
+        //const qStudents = query(collection(db, "students"), orderBy("total_points", "desc"));
+        const qStudents = query(collection(db, "students"), 
+            orderBy("total_points", "desc"), 
+            orderBy("seat_number", "asc")
+        );
         onSnapshot(qStudents, (snapshot) => {
             allStudents = [];
             const listDiv = document.getElementById('student-list');
