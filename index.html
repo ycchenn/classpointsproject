@@ -77,7 +77,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, where, writeBatch, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, where, writeBatch, increment, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBNSfMo7ASbkNOJiQQg6jDwq6dkUYohwDY",
@@ -92,33 +92,51 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         
+        const WEEK_START = new Date("2026-03-16T00:00:00"); // 要重設日期從這裡!設定結算週期的開始日期
         let currentStudent = null;
         let allStudents = []; 
         let batchAmount = 1;
 
         //const qStudents = query(collection(db, "students"), orderBy("total_points", "desc"));
-        const qStudents = query(collection(db, "students"), 
-            orderBy("total_points", "desc"), 
-            orderBy("seat_number", "asc")
-        );
-        onSnapshot(qStudents, (snapshot) => {
-            allStudents = [];
+        const qStudents = query(collection(db, "students"));
+        onSnapshot(qStudents, async (snapshot) => {
             const listDiv = document.getElementById('student-list');
-            listDiv.innerHTML = "";
-            snapshot.forEach(d => {
-                //const s = snapshotDoc.data(); 
+            
+            const scorePromises = snapshot.docs.map(async (d) => {
                 const s = d.data();
                 const sid = d.id;
-                allStudents.push({ id: sid, ...s });
 
+                const qWeekly = query(
+                    collection(db, "logs"),
+                    where("student_id", "==", sid),
+                    where("timestamp", ">=", WEEK_START)
+                );
+                
+                const logSnap = await getDocs(qWeekly);
+                
+                let weeklyScore = 0;
+                logSnap.forEach(logDoc => {
+                    weeklyScore += logDoc.data().amount;
+                });
+
+                return { ...s, id: sid, weeklyScore: weeklyScore };
+            });
+
+            const studentsWithWeekly = await Promise.all(scorePromises);
+            allStudents = studentsWithWeekly;
+
+            studentsWithWeekly.sort((a, b) => b.weeklyScore - a.weeklyScore || a.seat_number - b.seat_number);
+
+            listDiv.innerHTML = "";
+            studentsWithWeekly.forEach(s => {
                 listDiv.innerHTML += `
                     <div class="bg-white p-6 mb-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center card-active cursor-pointer" 
-                         onclick="openModal('${d.id}', '${s.name}', ${s.total_points})">
+                        onclick="openModal('${s.id}', '${s.name}', ${s.total_points})">
                         <div class="flex items-center gap-4">
                             <span class="text-orange-200 font-bold">#${s.seat_number}</span>
                             <span class="text-xl font-bold text-gray-800">${s.name}</span>
                         </div>
-                        <div class="text-3xl font-black text-orange-600">${s.total_points || 0}</div>
+                        <div class="text-3xl font-black text-orange-600">${s.weeklyScore}</div>
                     </div>`;
             });
         });
