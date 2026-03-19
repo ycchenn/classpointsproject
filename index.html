@@ -207,7 +207,6 @@
 
         function loadLogs(studentId) {
             const logList = document.getElementById('log-list');
-            const WEEK_START = new Date("2026-03-16T00:00:00"); 
 
             const qLogs = query(
                 collection(db, "logs"), 
