@@ -13,8 +13,14 @@
 </head>
 <body class="bg-gray-100 min-h-screen">
 
-    <nav class="bg-orange-500 text-white p-5 shadow-lg sticky top-0 z-50">
-        <h1 class="text-2xl font-bold text-center">三桂 班級榮譽榜</h1>
+    <nav class="bg-orange-500 text-white p-5 shadow-lg sticky top-0 z-50 flex justify-between items-center">
+        <h1 class="text-xl font-bold">三桂 榮譽榜</h1>
+        <div class="flex items-center gap-2">
+            <span class="text-xs">起算日:</span>
+            <!-- 加入日期選擇器，預設值可以是今天 -->
+            <input type="date" id="date-setter" onchange="updateStartDate(this.value)" 
+                class="text-gray-800 text-xs p-1 rounded border-none outline-none">
+        </div>
     </nav>
     <div class="text-xs text-orange-500 font-bold mb-2">
         成績結算週期：2026-03-16 至今
@@ -128,7 +134,23 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         
-        const WEEK_START = new Date("2026-04-09T00:00:00"); // 要重設日期從這裡!設定結算週期的開始日期
+        const savedDate = localStorage.getItem('selectedStartDate') || "2026-05-04";
+        let WEEK_START = new Date(savedDate + "T00:00:00");
+
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('date-setter').value = savedDate;
+            const infoDiv = document.querySelector('.text-xs.text-orange-500');
+            if (infoDiv) infoDiv.innerText = `成績結算週期：${savedDate} 至今`;
+        });
+
+        window.updateStartDate = (dateString) => {
+            if (!dateString) return;
+            
+            localStorage.setItem('selectedStartDate', dateString);
+            
+            location.reload(); 
+        };
+        
         let currentStudent = null;
         let allStudents = []; 
         let batchAmount = 1;
