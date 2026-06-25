@@ -1,3 +1,4 @@
+console.log('API URL:', import.meta.env.VITE_API_URL)
 import { useEffect, useState } from 'react'
 import { getStudents } from './api/index'
 import BatchModal from './components/BatchModal'
