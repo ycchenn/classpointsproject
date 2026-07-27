@@ -9,6 +9,7 @@
         .card-active:active { transform: scale(0.96); transition: 0.1s; }
         .modal-bg { background-color: rgba(0,0,0,0.5); }
         input[type="checkbox"] { width: 1.5rem; height: 1.5rem; cursor: pointer; }
+        .amount-option-active { transform: translateY(-1px); }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -42,12 +43,16 @@
             </div>
             
             <div class="p-6 flex-1 overflow-y-auto">
-                <div class="flex gap-4 mb-6">
-                    <button id="batch-plus" onclick="setBatchAmount(1)" class="flex-1 py-4 rounded-xl font-bold text-xl border-2 border-green-500 text-green-600 bg-green-50">＋1 分</button>
-                    <button id="batch-minus" onclick="setBatchAmount(-1)" class="flex-1 py-4 rounded-xl font-bold text-xl border-2 border-gray-200 text-gray-400">－1 分</button>
+                <div class="mb-6">
+                    <div class="font-bold text-gray-500 mb-3 text-sm text-left">調整分數：</div>
+                    <div id="batch-amount-options" class="flex gap-2 overflow-x-auto pb-1"></div>
                 </div>
 
-                <input type="text" id="batch-reason" placeholder="請輸入理由" class="w-full p-4 border rounded-xl mb-6 outline-orange-400 text-lg">
+                <div class="mb-6">
+                    <div class="font-bold text-gray-500 mb-3 text-sm text-left">常用理由：</div>
+                    <div id="batch-reason-presets" class="flex flex-wrap gap-2 mb-3"></div>
+                    <input type="text" id="batch-reason" placeholder="或手動輸入理由" class="w-full p-4 border rounded-xl outline-orange-400 text-lg">
+                </div>
 
                 <h3 class="font-bold text-gray-500 mb-3 text-sm text-left">選擇學生：</h3>
                 <div id="batch-student-select" class="space-y-2">
@@ -68,9 +73,15 @@
             </div>
             
             <div class="p-6">
-                <div class="flex gap-4 mb-8">
-                    <button onclick="changePoints(1)" class="flex-1 bg-green-500 text-white py-4 rounded-2xl font-bold text-xl active:scale-95 shadow-lg">+1 分</button>
-                    <button onclick="changePoints(-1)" class="flex-1 bg-red-500 text-white py-4 rounded-2xl font-bold text-xl active:scale-95 shadow-lg">-1 分</button>
+                <div class="mb-6">
+                    <div class="font-bold text-gray-500 mb-3 text-sm text-left">調整分數：</div>
+                    <div id="detail-amount-options" class="flex gap-2 overflow-x-auto pb-1"></div>
+                </div>
+
+                <div class="mb-8">
+                    <div class="font-bold text-gray-500 mb-3 text-sm text-left">常用理由：</div>
+                    <div id="detail-reason-presets" class="flex flex-wrap gap-2 mb-3"></div>
+                    <input type="text" id="detail-reason" placeholder="或手動輸入理由" class="w-full p-4 border rounded-xl outline-orange-400 text-lg">
                 </div>
 
                 <h3 class="font-bold text-gray-500 mb-4 border-l-4 border-orange-400 pl-2 text-sm">歷史加扣分紀錄</h3>
@@ -154,6 +165,45 @@
         let currentStudent = null;
         let allStudents = []; 
         let batchAmount = 1;
+        let detailAmount = 1;
+
+        const amountOptions = [-3, -2, -1, 1, 2, 3];
+        const reasonOptions = ["午餐吃完", "聽寫簽訂", "完成打掃", "作業未完成", "上課講話", "主動幫忙"];
+
+        function amountButtonClass(amount, selectedAmount) {
+            const base = "min-w-[4.5rem] px-4 py-3 rounded-xl font-bold text-lg border-2 transition-all active:scale-95";
+            const selected = amount === selectedAmount;
+            if (amount > 0) {
+                return `${base} ${selected ? "border-green-500 text-green-700 bg-green-50 amount-option-active" : "border-gray-200 text-gray-500 bg-white"}`;
+            }
+            return `${base} ${selected ? "border-red-500 text-red-700 bg-red-50 amount-option-active" : "border-gray-200 text-gray-500 bg-white"}`;
+        }
+
+        function renderAmountOptions(containerId, selectedAmount, onClickName) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            container.innerHTML = amountOptions.map((amount) => {
+                const label = amount > 0 ? `+${amount}` : `${amount}`;
+                return `<button type="button" onclick="${onClickName}(${amount})" class="${amountButtonClass(amount, selectedAmount)}">${label}</button>`;
+            }).join('');
+        }
+
+        function renderReasonPresets(containerId, inputId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            container.innerHTML = reasonOptions.map((reason) => {
+                return `<button type="button" onclick="setReasonText('${inputId}', '${reason}')" class="px-4 py-2 rounded-full border border-orange-200 bg-orange-50 text-orange-700 font-medium text-sm active:scale-95">${reason}</button>`;
+            }).join('');
+        }
+
+        window.setReasonText = (inputId, reason) => {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            input.value = reason;
+            input.focus();
+        };
 
         //const qStudents = query(collection(db, "students"), orderBy("total_points", "desc"));
         const qStudents = query(collection(db, "students"));
@@ -202,6 +252,10 @@
         window.openModal = async (id, name, points) => {
             currentStudent = { id, name, points };
             document.getElementById('modal-title').innerText = name;
+            detailAmount = 1;
+            document.getElementById('detail-reason').value = "";
+            renderAmountOptions('detail-amount-options', detailAmount, 'changePoints');
+            renderReasonPresets('detail-reason-presets', 'detail-reason');
             document.getElementById('detail-modal').classList.remove('hidden');
             loadLogs(id); 
         };
@@ -211,8 +265,10 @@
         };
 
         window.changePoints = async (amount) => {
-            const reason = prompt(`請輸入給 ${currentStudent.name} ${amount > 0 ? '加' : '扣'}分的理由：`, amount > 0 ? "表現優良" : "秩序不佳");
-            if (reason === null) return;
+            if (!currentStudent) return;
+            const reasonInput = document.getElementById('detail-reason');
+            const reason = reasonInput.value || (amount > 0 ? "表現優良" : "秩序不佳");
+
             try {
                 await updateDoc(doc(db, "students", currentStudent.id), {
                     total_points: currentStudent.points + amount
@@ -277,6 +333,10 @@
         window.openBatchModal = () => {
             const selectDiv = document.getElementById('batch-student-select');
             const sortedBySeat = [...allStudents].sort((a, b) => a.seat_number - b.seat_number);
+            batchAmount = 1;
+            document.getElementById('batch-reason').value = "";
+            renderAmountOptions('batch-amount-options', batchAmount, 'setBatchAmount');
+            renderReasonPresets('batch-reason-presets', 'batch-reason');
             
             selectDiv.innerHTML = sortedBySeat.map(s => `
                 <label class="flex items-center gap-4 p-4 border rounded-xl active:bg-orange-50 cursor-pointer">
@@ -293,8 +353,7 @@
 
         window.setBatchAmount = (amt) => {
             batchAmount = amt;
-            document.getElementById('batch-plus').className = amt === 1 ? "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-green-500 text-green-600 bg-green-50" : "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-gray-200 text-gray-400";
-            document.getElementById('batch-minus').className = amt === -1 ? "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-red-500 text-red-600 bg-red-50" : "flex-1 py-4 rounded-xl font-bold text-xl border-2 border-gray-200 text-gray-400";
+            renderAmountOptions('batch-amount-options', batchAmount, 'setBatchAmount');
         };
 
         window.submitBatch = async () => {
@@ -335,6 +394,13 @@
                 btn.innerText = "確認送出";
             }
         };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            renderAmountOptions('detail-amount-options', detailAmount, 'changePoints');
+            renderAmountOptions('batch-amount-options', batchAmount, 'setBatchAmount');
+            renderReasonPresets('detail-reason-presets', 'detail-reason');
+            renderReasonPresets('batch-reason-presets', 'batch-reason');
+        });
     </script>
 </body>
 </html>
